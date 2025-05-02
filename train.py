@@ -17,6 +17,8 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision.io import read_image
 import torchvision.transforms.functional as TF
 
+device = "cuda"
+
 # ── On‑the‑fly patch dataset ──────────────────────────────────────────────────
 class CachedPatchDataset(Dataset):
     def __init__(self, root_dir, lr_size, hr_size, cache_size=2048):

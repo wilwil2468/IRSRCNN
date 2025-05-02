@@ -19,7 +19,12 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms.functional as TF
 
-# ── On‑the‑fly patch dataset ──────────────────────────────────────────────────
+# ── Module-level cache for fast image loading ─────────────────────────────────
+@lru_cache(maxsize=2048)
+def _cached_load(path_str):
+    # Decode JPEG directly to a 3-channel [C,H,W] float tensor in [0,1]
+    return read_image(path_str, mode=ImageReadMode.RGB).float().div(255)
+
 class OnTheFlyPatchDataset(Dataset):
     def __init__(self, root_dir, lr_size, hr_size):
         self.paths = sorted(Path(root_dir).rglob("*.jpg"))
@@ -28,25 +33,26 @@ class OnTheFlyPatchDataset(Dataset):
     def __len__(self):
         return len(self.paths)
 
-    def _load_image(path):
-        # [3,H,W], uint8 → float32 [0,1]
-        return read_image(path, mode=ImageReadMode.RGB).float().div(255)
-
-    @lru_cache(maxsize=2048)
-    def _cached_load(path_str):
-        return _load_image(path_str)   # from step 1
-
     def __getitem__(self, idx):
-        # read_image returns a uint8 Tensor [C,H,W]
-        img = _cached_load(path)  # hits in-RAM cache after the first epoch
-        x = random.randint(0, img.width  - self.hr_size)
-        y = random.randint(0, img.height - self.hr_size)
-        hr = img.crop((x, y, x + self.hr_size, y + self.hr_size))
-        lr = hr.resize((self.lr_size, self.lr_size), Image.BICUBIC)
-        # convert to tensor [C,H,W], normalize to [0,1]
-        lr_t = torch.from_numpy(np.array(lr)).permute(2,0,1).float().div(255)
-        hr_t = torch.from_numpy(np.array(hr)).permute(2,0,1).float().div(255)
-        return lr_t, hr_t
+        # Fetch from cache or decode if missing
+        path = str(self.paths[idx])
+        img = _cached_load(path)  # [3, H, W]
+
+        C, H, W = img.shape
+        # Random HR crop
+        top = random.randint(0, H - self.hr_size)
+        left = random.randint(0, W - self.hr_size)
+        hr = TF.crop(img, top, left, self.hr_size, self.hr_size)
+
+        # Downscale to LR
+        lr = TF.resize(
+            hr,
+            [self.lr_size, self.lr_size],
+            interpolation=TF.InterpolationMode.BICUBIC
+        )
+
+        return lr, hr
+
 
 # ── Argument parsing ───────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser()

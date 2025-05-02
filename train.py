@@ -38,6 +38,7 @@ parser.add_argument("--save-every",     type=int, default=1000)
 parser.add_argument("--save-log",       type=int, default=0)
 parser.add_argument("--save-best-only", type=int, default=0)
 parser.add_argument("--ckpt-dir",       type=str, default="")
+parser.add_argument("--num-worker",     type=int, default=4)
 FLAGS, _ = parser.parse_known_args()
 
 # ── Hyperparameters & paths ────────────────────────────────────────────────────
@@ -47,6 +48,7 @@ save_every     = FLAGS.save_every
 save_log       = (FLAGS.save_log == 1)
 save_best_only = (FLAGS.save_best_only == 1)
 architecture   = FLAGS.architecture
+num_worker   = FLAGS.num_worker
 
 if architecture not in ["915","935","955"]:
     raise ValueError("architecture must be 915, 935, or 955")
@@ -64,8 +66,8 @@ hr_crop_size  = 21 if architecture=="915" else 19 if architecture=="935" else 17
 train_ds = OnTheFlyPatchDataset("dataset/train",      lr_crop_size, hr_crop_size)
 valid_ds = OnTheFlyPatchDataset("dataset/validation", lr_crop_size, hr_crop_size)
 
-train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=4, pin_memory=True)
-valid_loader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=num_worker, pin_memory=True)
+valid_loader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=num_worker, pin_memory=True)
 
 # ── 2) Wrap them into get_batch API ──────────────────────────────────────────
 class BatchLoaderWrapper:

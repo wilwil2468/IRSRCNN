@@ -9,6 +9,7 @@ from model import SRCNN
 from utils.common import PSNR
 from torchvision import transforms
 import kornia.augmentation as K
+from kornia.constants import Resample
 
 # ── GPU Patch Dataset ──────────────────────────────────────────────────
 
@@ -31,7 +32,12 @@ class GPUPatchDataset(Dataset):
         #    RandomCrop → [1,C,hr,hr]
         #    Resize    → [1,C,lr,lr]
         self.crop   = K.RandomCrop((hr_size, hr_size)).to(device)
-        self.resize = K.Resize((lr_size, lr_size), interpolation='bicubic').to(device)
+        self.resize = K.Resize(
+            (lr_size, lr_size),
+            resample=Resample.BICUBIC.name,   # <-- use `resample=` here
+            align_corners=True,               # optional, controls corner alignment
+            antialias=True                    # optional, adds Gaussian pre-filtering when downscaling
+        ).to(device)
 
     def __len__(self):
         return len(self.raw_imgs)

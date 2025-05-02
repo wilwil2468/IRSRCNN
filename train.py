@@ -94,8 +94,8 @@ lr_crop_size  = 33
 hr_crop_size  = 21 if architecture=="915" else 19 if architecture=="935" else 17
 
 # ── 1) Create DataLoaders ────────────────────────────────────────────────────
-train_ds = LMDBPatchDataset("train_patches.lmdb")
-valid_ds = LMDBPatchDataset("valid_patches.lmdb")
+train_ds = LMDBPatchDataset(f"train_patches_{architecture}.lmdb")
+valid_ds = LMDBPatchDataset(f"valid_patches_{architecture}.lmdb")
 
 train_loader = DataLoader(
     train_ds, batch_size=batch_size, shuffle=True,

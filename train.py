@@ -16,10 +16,13 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision.io import read_image, ImageReadMode
 import torchvision.transforms.functional as TF
+
+import kornia.augmentation as K
+from kornia.constants import Resample
 import multiprocessing as mp
 
 mp_ctx = mp.get_context('spawn')
-device = "cuda"
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # ── module-level LRU cache — pickle-safe ───────────────────────────────
 @lru_cache(maxsize=2048)
@@ -29,29 +32,35 @@ def _load_image(path_str):
 
 
 class CachedPatchDataset(Dataset):
-    def __init__(self, root_dir, lr_size, hr_size):
+    def __init__(self, root_dir, lr_size, hr_size,
+                 cache_size=2048, device="cuda"):
         self.paths   = sorted(Path(root_dir).rglob("*.jpg"))
         self.lr_size = lr_size
         self.hr_size = hr_size
+        self.device  = torch.device(device)
+
+        # define GPU‐side Kornia transforms:
+        self.crop = K.RandomCrop((self.hr_size, self.hr_size), p=1.0) \
+                        .to(self.device)
+        self.resize = K.Resize(
+            (self.lr_size, self.lr_size),
+            resample=Resample.BICUBIC.name,
+            align_corners=True,
+            antialias=False
+        ).to(self.device)
 
     def __len__(self):
         return len(self.paths)
 
     def __getitem__(self, idx):
         path = str(self.paths[idx])
-        img  = _load_image(path)           # this is cached per‐process
+        img  = _load_image(path)                   # [3,H,W], CPU
+        img  = img.unsqueeze(0).to(self.device)    # [1,3,H,W] on GPU
 
-        C, H, W = img.shape
-        top  = random.randint(0, H - self.hr_size)
-        left = random.randint(0, W - self.hr_size)
+        hr = self.crop(img)    # [1,3,hr,hr]
+        lr = self.resize(hr)   # [1,3,lr,lr]
 
-        hr = TF.crop(img, top, left, self.hr_size, self.hr_size)
-        lr = TF.resize(
-            hr,
-            [self.lr_size, self.lr_size],
-            interpolation=TF.InterpolationMode.BICUBIC
-        )
-        return lr, hr
+        return lr.squeeze(0), hr.squeeze(0)
 
 
 class BatchLoaderWrapper:
@@ -103,7 +112,7 @@ lr_crop_size  = 33
 hr_crop_size  = 21 if architecture=="915" else 19 if architecture=="935" else 17
 
 # ── DataLoaders ────────────────────────────────────────────────────────────
-train_ds = CachedPatchDataset("dataset/train",      lr_crop_size, hr_crop_size)
+train_ds = CachedPatchDataset("dataset/train",      lr_crop_size, hr_crop_size, cache_size=2048, device="cuda")
 valid_ds = CachedPatchDataset("dataset/validation", lr_crop_size, hr_crop_size)
 
 train_loader = DataLoader(
@@ -133,7 +142,6 @@ valid_set = BatchLoaderWrapper(valid_loader)
 
 # ── 3) Model setup & training ─────────────────────────────────────────────────
 def main():
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     srcnn = SRCNN(architecture, device)
     srcnn.setup(
         optimizer=torch.optim.Adam(srcnn.model.parameters(), lr=2e-5),

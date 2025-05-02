@@ -26,11 +26,8 @@ class logger:
 class SRCNN:
     def __init__(self, architecture, device):
         self.device = device
-        # instantiate and push to CUDA
+        # instantiate and push to device
         self.model = SRCNN_model(architecture).to(device)
-        # if you’re on PyTorch ≥2.0, compile it into a single graph
-        #if hasattr(torch, "compile"):
-        #   self.model = torch.compile(self.model)
         self.optimizer = None
         self.loss = None
         self.metric = None
@@ -48,22 +45,18 @@ class SRCNN:
     def load_checkpoint(self, ckpt_path):
         if not os.path.exists(ckpt_path):
             return
-
-        # 1) load the checkpoint dict
         self.ckpt_man = torch.load(ckpt_path)
-        # 2) restore optimizer
         self.optimizer.load_state_dict(self.ckpt_man['optimizer'])
-
-        # 3) load model weights directly
         self.model.load_state_dict(self.ckpt_man['model'])
 
     def load_weights(self, filepath):
-        self.model.load_state_dict(torch.load(filepath, map_location=torch.device(self.device)))
+        self.model.load_state_dict(
+            torch.load(filepath, map_location=torch.device(self.device))
+        )
 
-    def predict(self, lr):
+    def predict(self, lr_batch):
         self.model.eval()
-        sr = self.model(lr)
-        return sr
+        return self.model(lr_batch)
 
     def evaluate(self, dataloader):
         losses, metrics = [], []

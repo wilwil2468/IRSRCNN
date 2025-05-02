@@ -1,12 +1,15 @@
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
+import random
+import torch
 import argparse
 import os
 import numpy as np
 from model import SRCNN
 from utils.common import PSNR
 from torchvision import transforms
+from torchvision.io import read_image, ImageReadMode
 
 import random
 from pathlib import Path
@@ -14,70 +17,36 @@ from functools import lru_cache
 
 import torch
 from torch.utils.data import Dataset, DataLoader
-from torchvision.io import read_image, ImageReadMode
 import torchvision.transforms.functional as TF
 
-import kornia.augmentation as K
-from kornia.constants import Resample
-import multiprocessing as mp
-
-mp_ctx = mp.get_context('spawn')
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-# ── module-level LRU cache — pickle-safe ───────────────────────────────
-cache_size = 512
-@lru_cache(maxsize=cache_size)
-def _load_image(path_str):
-    # force 3‐channel decode
-    return read_image(path_str, mode=ImageReadMode.RGB).float().div(255)
-
-
-class CachedPatchDataset(Dataset):
-    def __init__(self, root_dir, lr_size, hr_size,
-                 cache_size=cache_size, device="cuda"):
-        self.paths   = sorted(Path(root_dir).rglob("*.jpg"))
-        self.lr_size = lr_size
-        self.hr_size = hr_size
-        self.device  = torch.device(device)
-
-        # define GPU‐side Kornia transforms:
-        self.crop = K.RandomCrop((self.hr_size, self.hr_size), p=1.0) \
-                        .to(self.device)
-        self.resize = K.Resize(
-            (self.lr_size, self.lr_size),
-            resample=Resample.BICUBIC.name,
-            align_corners=True,
-            antialias=False
-        ).to(self.device)
+# ── On‑the‑fly patch dataset ──────────────────────────────────────────────────
+class OnTheFlyPatchDataset(Dataset):
+    def __init__(self, root_dir, lr_size, hr_size):
+        self.paths = sorted(Path(root_dir).rglob("*.jpg"))
+        self.lr_size, self.hr_size = lr_size, hr_size
 
     def __len__(self):
         return len(self.paths)
 
+    def _load_image(path):
+        # [3,H,W], uint8 → float32 [0,1]
+        return read_image(path, mode=ImageReadMode.RGB).float().div(255)
+
+    @lru_cache(maxsize=2048)
+    def _cached_load(path_str):
+        return _load_image(path_str)   # from step 1
+
     def __getitem__(self, idx):
-        path = str(self.paths[idx])
-        img  = _load_image(path)                   # [3,H,W], CPU
-        img  = img.unsqueeze(0).to(self.device)    # [1,3,H,W] on GPU
-
-        hr = self.crop(img)    # [1,3,hr,hr]
-        lr = self.resize(hr)   # [1,3,lr,lr]
-
-        return lr.squeeze(0), hr.squeeze(0)
-
-
-class BatchLoaderWrapper:
-    def __init__(self, loader):
-        self.loader   = loader
-        self.iterator = None     # don't spawn workers until first get_batch()
-
-    def get_batch(self, _batch_size):
-        if self.iterator is None:
-            self.iterator = iter(self.loader)
-        try:
-            lr, hr = next(self.iterator)
-        except StopIteration:
-            self.iterator = iter(self.loader)
-            lr, hr = next(self.iterator)
-        return lr, hr, None
+        # read_image returns a uint8 Tensor [C,H,W]
+        img = _cached_load(path)  # hits in-RAM cache after the first epoch
+        x = random.randint(0, img.width  - self.hr_size)
+        y = random.randint(0, img.height - self.hr_size)
+        hr = img.crop((x, y, x + self.hr_size, y + self.hr_size))
+        lr = hr.resize((self.lr_size, self.lr_size), Image.BICUBIC)
+        # convert to tensor [C,H,W], normalize to [0,1]
+        lr_t = torch.from_numpy(np.array(lr)).permute(2,0,1).float().div(255)
+        hr_t = torch.from_numpy(np.array(hr)).permute(2,0,1).float().div(255)
+        return lr_t, hr_t
 
 # ── Argument parsing ───────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser()
@@ -112,37 +81,32 @@ dataset_dir   = "dataset"
 lr_crop_size  = 33
 hr_crop_size  = 21 if architecture=="915" else 19 if architecture=="935" else 17
 
-# ── DataLoaders ────────────────────────────────────────────────────────────
-train_ds = CachedPatchDataset("dataset/train",      lr_crop_size, hr_crop_size, cache_size=cache_size, device="cuda")
-valid_ds = CachedPatchDataset("dataset/validation", lr_crop_size, hr_crop_size)
+# ── 1) Create DataLoaders ────────────────────────────────────────────────────
+train_ds = OnTheFlyPatchDataset("dataset/train",      lr_crop_size, hr_crop_size)
+valid_ds = OnTheFlyPatchDataset("dataset/validation", lr_crop_size, hr_crop_size)
 
-train_loader = DataLoader(
-    train_ds,
-    batch_size=batch_size,
-    shuffle=True,
-    num_workers=num_worker,
-    pin_memory=False,
-    persistent_workers=True,
-    prefetch_factor=2,
-    multiprocessing_context=mp_ctx,    # spawn workers safely
-)
+train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=4)
+valid_loader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=4)
 
-valid_loader = DataLoader(
-    valid_ds,
-    batch_size=batch_size,
-    shuffle=False,
-    num_workers=num_worker,
-    pin_memory=False,
-    persistent_workers=True,
-    prefetch_factor=2,
-    multiprocessing_context=mp_ctx,
-)
+# ── 2) Wrap them into get_batch API ──────────────────────────────────────────
+class BatchLoaderWrapper:
+    def __init__(self, loader):
+        self.loader = loader
+        self.iterator = iter(loader)
+    def get_batch(self, _batch_size):
+        try:
+            lr, hr = next(self.iterator)
+        except StopIteration:
+            self.iterator = iter(self.loader)
+            lr, hr = next(self.iterator)
+        return lr, hr, None
 
 train_set = BatchLoaderWrapper(train_loader)
 valid_set = BatchLoaderWrapper(valid_loader)
 
 # ── 3) Model setup & training ─────────────────────────────────────────────────
 def main():
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     srcnn = SRCNN(architecture, device)
     srcnn.setup(
         optimizer=torch.optim.Adam(srcnn.model.parameters(), lr=2e-5),

@@ -106,28 +106,6 @@ valid_loader = DataLoader(
     num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=4
 )
 
-# ── 2) Wrap them into get_batch API ──────────────────────────────────────────
-class BatchLoaderWrapper:
-    def __init__(self, loader):
-        self.loader = loader
-        self.iterator = None
-
-    # accept shuffle_each_epoch (model.evaluate passes it) but ignore,
-    # relying on DataLoader(shuffle=True) to reshuffle when you re-iter
-    def get_batch(self, _batch_size, shuffle_each_epoch: bool = False):
-        if self.iterator is None:
-           self.iterator = iter(self.loader)
-        try:
-            lr, hr = next(self.iterator)
-        except StopIteration:
-            # end of epoch: re-create iterator (DataLoader will reshuffle if shuffle=True)
-            self.iterator = iter(self.loader)
-            lr, hr = next(self.iterator)
-        return lr, hr, False
-
-train_set = BatchLoaderWrapper(train_loader)
-valid_set = BatchLoaderWrapper(valid_loader)
-
 # ── 3) Model setup & training ─────────────────────────────────────────────────
 def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -141,8 +119,8 @@ def main():
     )
     srcnn.load_checkpoint(ckpt_path)
     srcnn.train(
-        train_set,     # now has get_batch()
-        valid_set,     # now has get_batch()
+        train_loader,     # now has get_batch()
+        valid_loader,     # now has get_batch()
         steps=steps,
         batch_size=batch_size,
         save_best_only=save_best_only,

@@ -54,19 +54,8 @@ class SRCNN:
         # 2) restore optimizer
         self.optimizer.load_state_dict(self.ckpt_man['optimizer'])
 
-        # 3) fix up the state_dict keys for the wrapped model
-        raw_sd = self.ckpt_man['model']
-        fixed_sd = {}
-        for k, v in raw_sd.items():
-            # if the wrapped OptimizedModule expects its original under "_orig_mod"
-            if k.startswith('_orig_mod.'):
-                fixed_sd[k] = v
-            else:
-                fixed_sd[f'_orig_mod.{k}'] = v
-
-        # 4) load into your model
-        #self.model.load_state_dict(fixed_sd)
-        self.model.load_state_dict(k)
+        # 3) load model weights directly
+        self.model.load_state_dict(self.ckpt_man['model'])
 
     def load_weights(self, filepath):
         self.model.load_state_dict(torch.load(filepath, map_location=torch.device(self.device)))

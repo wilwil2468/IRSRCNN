@@ -65,7 +65,8 @@ class SRCNN:
                 fixed_sd[f'_orig_mod.{k}'] = v
 
         # 4) load into your model
-        self.model.load_state_dict(fixed_sd)
+        #self.model.load_state_dict(fixed_sd)
+        self.model.load_state_dict(k)
 
     def load_weights(self, filepath):
         self.model.load_state_dict(torch.load(filepath, map_location=torch.device(self.device)))

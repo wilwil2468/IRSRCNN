@@ -29,10 +29,18 @@ class OnTheFlyPatchDataset(Dataset):
         hr_t = torch.from_numpy(np.array(hr)).permute(2,0,1).float().div(255)
         return lr_t, hr_t
 
-# ── parse arguments, hyperparams ───────────────────────────────────────────────
+# ── Argument parsing ───────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser()
-# (… same as before …)
+parser.add_argument("--steps",          type=int, default=100000)
+parser.add_argument("--batch-size",     type=int, default=128)
+parser.add_argument("--architecture",   type=str, default="915")
+parser.add_argument("--save-every",     type=int, default=1000)
+parser.add_argument("--save-log",       type=int, default=0)
+parser.add_argument("--save-best-only", type=int, default=0)
+parser.add_argument("--ckpt-dir",       type=str, default="")
 FLAGS, _ = parser.parse_known_args()
+
+# ── Hyperparameters & paths ────────────────────────────────────────────────────
 steps          = FLAGS.steps
 batch_size     = FLAGS.batch_size
 save_every     = FLAGS.save_every
@@ -40,8 +48,17 @@ save_log       = (FLAGS.save_log == 1)
 save_best_only = (FLAGS.save_best_only == 1)
 architecture   = FLAGS.architecture
 
-# checkpoint paths logic…
-# determine lr_crop_size, hr_crop_size based on architecture…
+if architecture not in ["915","935","955"]:
+    raise ValueError("architecture must be 915, 935, or 955")
+
+ckpt_dir = FLAGS.ckpt_dir or f"checkpoint/SRCNN{architecture}"
+os.makedirs(ckpt_dir, exist_ok=True)
+model_path = os.path.join(ckpt_dir, f"SRCNN-{architecture}.pt")
+ckpt_path  = os.path.join(ckpt_dir, "ckpt.pt")
+
+dataset_dir   = "dataset"
+lr_crop_size  = 33
+hr_crop_size  = 21 if architecture=="915" else 19 if architecture=="935" else 17
 
 # ── 1) Create DataLoaders ────────────────────────────────────────────────────
 train_ds = OnTheFlyPatchDataset("dataset/train",      lr_crop_size, hr_crop_size)

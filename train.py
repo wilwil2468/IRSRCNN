@@ -34,6 +34,7 @@ class CachedPatchDataset(Dataset):
         return read_image(path_str).float().div(255)
 
     def __getitem__(self, idx):
+        path = str(self.paths[idx])
         img = read_image(path).float().div(255).unsqueeze(0).to(device)  # [1,C,H,W]
 
         hr  = self.crop(img)                                             # Kornia RandomCrop on GPU

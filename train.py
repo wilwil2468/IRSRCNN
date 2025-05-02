@@ -17,10 +17,6 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision.io import read_image
 import torchvision.transforms.functional as TF
 
-import multiprocessing as mp
-
-mp_ctx = mp.get_context('spawn')
-
 # ── On‑the‑fly patch dataset ──────────────────────────────────────────────────
 class CachedPatchDataset(Dataset):
     def __init__(self, root_dir, lr_size, hr_size, cache_size=2048):
@@ -82,7 +78,7 @@ hr_crop_size  = 21 if architecture=="915" else 19 if architecture=="935" else 17
 train_ds = CachedPatchDataset("dataset/train",      lr_crop_size, hr_crop_size)
 valid_ds = CachedPatchDataset("dataset/validation", lr_crop_size, hr_crop_size)
 
-train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=2, multiprocessing_context=mp_ctx)
+train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=2)
 valid_loader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=2)
 
 # ── 2) Wrap them into get_batch API ──────────────────────────────────────────

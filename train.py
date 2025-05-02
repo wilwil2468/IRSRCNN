@@ -79,8 +79,8 @@ lr_crop_size  = 33
 hr_crop_size  = 21 if architecture=="915" else 19 if architecture=="935" else 17
 
 # ── 1) Create DataLoaders ────────────────────────────────────────────────────
-train_ds = OnTheFlyPatchDataset("dataset/train",      lr_crop_size, hr_crop_size)
-valid_ds = OnTheFlyPatchDataset("dataset/validation", lr_crop_size, hr_crop_size)
+train_ds = CachedPatchDataset("dataset/train",      lr_crop_size, hr_crop_size)
+valid_ds = CachedPatchDataset("dataset/validation", lr_crop_size, hr_crop_size)
 
 train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=2, multiprocessing_context=mp_ctx)
 valid_loader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=2)

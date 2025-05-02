@@ -1,29 +1,93 @@
-# wrap DataLoader to provide get_batch(batch_size) API
+from pathlib import Path
+from torch.utils.data import Dataset, DataLoader
+from PIL import Image
+import random
+import torch
+import argparse
+import os
+
+from model import SRCNN
+from utils.common import PSNR
+
+# ── On‑the‑fly patch dataset ──────────────────────────────────────────────────
+class OnTheFlyPatchDataset(Dataset):
+    def __init__(self, root_dir, lr_size, hr_size):
+        self.paths = sorted(Path(root_dir).rglob("*.png"))
+        self.lr_size, self.hr_size = lr_size, hr_size
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        img = Image.open(self.paths[idx]).convert("RGB")
+        x = random.randint(0, img.width  - self.hr_size)
+        y = random.randint(0, img.height - self.hr_size)
+        hr = img.crop((x, y, x + self.hr_size, y + self.hr_size))
+        lr = hr.resize((self.lr_size, self.lr_size), Image.BICUBIC)
+        # convert to tensor [C,H,W], normalize to [0,1]
+        lr_t = torch.from_numpy(np.array(lr)).permute(2,0,1).float().div(255)
+        hr_t = torch.from_numpy(np.array(hr)).permute(2,0,1).float().div(255)
+        return lr_t, hr_t
+
+# ── parse arguments, hyperparams ───────────────────────────────────────────────
+parser = argparse.ArgumentParser()
+# (… same as before …)
+FLAGS, _ = parser.parse_known_args()
+steps          = FLAGS.steps
+batch_size     = FLAGS.batch_size
+save_every     = FLAGS.save_every
+save_log       = (FLAGS.save_log == 1)
+save_best_only = (FLAGS.save_best_only == 1)
+architecture   = FLAGS.architecture
+
+# checkpoint paths logic…
+# determine lr_crop_size, hr_crop_size based on architecture…
+
+# ── 1) Create DataLoaders ────────────────────────────────────────────────────
+train_ds = OnTheFlyPatchDataset("dataset/train",      lr_crop_size, hr_crop_size)
+valid_ds = OnTheFlyPatchDataset("dataset/validation", lr_crop_size, hr_crop_size)
+
+train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=4, pin_memory=True)
+valid_loader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+
+# ── 2) Wrap them into get_batch API ──────────────────────────────────────────
 class BatchLoaderWrapper:
     def __init__(self, loader):
         self.loader = loader
-        self.iter = iter(loader)
-    def get_batch(self, batch_size):
+        self.iterator = iter(loader)
+    def get_batch(self, _batch_size):
         try:
-            lr, hr = next(self.iter)
+            lr, hr = next(self.iterator)
         except StopIteration:
-            # restart epoch
-            self.iter = iter(self.loader)
-            lr, hr = next(self.iter)
-        return lr, hr, None   # the 'None' is for the placeholder your model expects
+            self.iterator = iter(self.loader)
+            lr, hr = next(self.iterator)
+        return lr, hr, None
 
-# after you build train_loader and valid_loader:
 train_set = BatchLoaderWrapper(train_loader)
 valid_set = BatchLoaderWrapper(valid_loader)
 
-# now call exactly as before:
-srcnn.train(
-    train_set,        # has get_batch
-    valid_set,        # has get_batch
-    steps=steps,
-    batch_size=batch_size,   # still passed, though ignored by wrapper
-    save_best_only=save_best_only,
-    save_every=save_every,
-    save_log=save_log,
-    log_dir=ckpt_dir
-)
+# ── 3) Model setup & training ─────────────────────────────────────────────────
+def main():
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    srcnn = SRCNN(architecture, device)
+    srcnn.setup(
+        optimizer=torch.optim.Adam(srcnn.model.parameters(), lr=2e-5),
+        loss=torch.nn.MSELoss(),
+        model_path=model_path,
+        ckpt_path=ckpt_path,
+        metric=PSNR
+    )
+    srcnn.load_checkpoint(ckpt_path)
+    srcnn.train(
+        train_set,     # now has get_batch()
+        valid_set,     # now has get_batch()
+        steps=steps,
+        batch_size=batch_size,
+        save_best_only=save_best_only,
+        save_every=save_every,
+        save_log=save_log,
+        log_dir=ckpt_dir
+    )
+
+if __name__ == "__main__":
+    main()

@@ -110,14 +110,20 @@ valid_loader = DataLoader(
 class BatchLoaderWrapper:
     def __init__(self, loader):
         self.loader = loader
-        self.iterator = iter(loader)
-    def get_batch(self, _batch_size):
+        self.iterator = None
+
+    # accept shuffle_each_epoch (model.evaluate passes it) but ignore,
+    # relying on DataLoader(shuffle=True) to reshuffle when you re-iter
+    def get_batch(self, _batch_size, shuffle_each_epoch: bool = False):
+        if self.iterator is None:
+           self.iterator = iter(self.loader)
         try:
             lr, hr = next(self.iterator)
         except StopIteration:
+            # end of epoch: re-create iterator (DataLoader will reshuffle if shuffle=True)
             self.iterator = iter(self.loader)
             lr, hr = next(self.iterator)
-        return lr, hr, None
+        return lr, hr, False
 
 train_set = BatchLoaderWrapper(train_loader)
 valid_set = BatchLoaderWrapper(valid_loader)

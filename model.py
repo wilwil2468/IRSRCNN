@@ -26,7 +26,11 @@ class logger:
 class SRCNN:
     def __init__(self, architecture, device):
         self.device = device
+        # instantiate and push to CUDA
         self.model = SRCNN_model(architecture).to(device)
+        # if you’re on PyTorch ≥2.0, compile it into a single graph
+        if hasattr(torch, "compile"):
+            self.model = torch.compile(self.model)
         self.optimizer = None
         self.loss = None
         self.metric = None

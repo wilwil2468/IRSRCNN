@@ -1,8 +1,6 @@
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
-import random
-import torch
 import argparse
 import os
 import numpy as np
@@ -10,25 +8,42 @@ from model import SRCNN
 from utils.common import PSNR
 from torchvision import transforms
 
+import random
+from pathlib import Path
+from functools import lru_cache
+
+import torch
+from torch.utils.data import Dataset, DataLoader
+from torchvision.io import read_image
+import torchvision.transforms.functional as TF
+
+import multiprocessing as mp
+
+mp_ctx = mp.get_context('spawn')
+
 # ── On‑the‑fly patch dataset ──────────────────────────────────────────────────
-class OnTheFlyPatchDataset(Dataset):
-    def __init__(self, root_dir, lr_size, hr_size):
-        self.paths = sorted(Path(root_dir).rglob("*.jpg"))
-        self.lr_size, self.hr_size = lr_size, hr_size
+class CachedPatchDataset(Dataset):
+    def __init__(self, root_dir, lr_size, hr_size, cache_size=2048):
+        self.paths   = sorted(Path(root_dir).rglob("*.jpg"))
+        self.lr_size = lr_size
+        self.hr_size = hr_size
+        # decorate the loader to keep the N most-recent images in RAM
+        self._load_image = lru_cache(maxsize=cache_size)(self._load_image_uncached)
 
     def __len__(self):
         return len(self.paths)
 
+    def _load_image_uncached(self, path_str):
+        # fast JPEG → torch.Tensor, [C,H,W], float in [0,1]
+        return read_image(path_str).float().div(255)
+
     def __getitem__(self, idx):
-        img = Image.open(self.paths[idx]).convert("RGB")
-        x = random.randint(0, img.width  - self.hr_size)
-        y = random.randint(0, img.height - self.hr_size)
-        hr = img.crop((x, y, x + self.hr_size, y + self.hr_size))
-        lr = hr.resize((self.lr_size, self.lr_size), Image.BICUBIC)
-        # convert to tensor [C,H,W], normalize to [0,1]
-        lr_t = torch.from_numpy(np.array(lr)).permute(2,0,1).float().div(255)
-        hr_t = torch.from_numpy(np.array(hr)).permute(2,0,1).float().div(255)
-        return lr_t, hr_t
+        img = read_image(path).float().div(255).unsqueeze(0).to(device)  # [1,C,H,W]
+
+        hr  = self.crop(img)                                             # Kornia RandomCrop on GPU
+        lr  = self.resize(hr)                                            # Kornia Resize on GPU
+
+        return lr.squeeze(0), hr.squeeze(0)
 
 # ── Argument parsing ───────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser()
@@ -67,7 +82,7 @@ hr_crop_size  = 21 if architecture=="915" else 19 if architecture=="935" else 17
 train_ds = OnTheFlyPatchDataset("dataset/train",      lr_crop_size, hr_crop_size)
 valid_ds = OnTheFlyPatchDataset("dataset/validation", lr_crop_size, hr_crop_size)
 
-train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=2)
+train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=2, multiprocessing_context=mp_ctx)
 valid_loader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=2)
 
 # ── 2) Wrap them into get_batch API ──────────────────────────────────────────

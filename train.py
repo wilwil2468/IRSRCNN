@@ -1,5 +1,6 @@
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
+from PIL import Image
 import random
 import torch
 import argparse

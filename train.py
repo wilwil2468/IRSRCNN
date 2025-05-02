@@ -19,6 +19,7 @@ import torchvision.transforms.functional as TF
 import multiprocessing as mp
 
 mp_ctx = mp.get_context('spawn')
+device = "cuda"
 
 # ── module-level LRU cache — pickle-safe ───────────────────────────────
 @lru_cache(maxsize=2048)

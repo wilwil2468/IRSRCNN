@@ -46,11 +46,26 @@ class SRCNN:
         self.ckpt_path = ckpt_path
 
     def load_checkpoint(self, ckpt_path):
-        if not exists(ckpt_path):
+        if not os.path.exists(ckpt_path):
             return
+
+        # 1) load the checkpoint dict
         self.ckpt_man = torch.load(ckpt_path)
+        # 2) restore optimizer
         self.optimizer.load_state_dict(self.ckpt_man['optimizer'])
-        self.model.load_state_dict(self.ckpt_man['model'])
+
+        # 3) fix up the state_dict keys for the wrapped model
+        raw_sd = self.ckpt_man['model']
+        fixed_sd = {}
+        for k, v in raw_sd.items():
+            # if the wrapped OptimizedModule expects its original under "_orig_mod"
+            if k.startswith('_orig_mod.'):
+                fixed_sd[k] = v
+            else:
+                fixed_sd[f'_orig_mod.{k}'] = v
+
+        # 4) load into your model
+        self.model.load_state_dict(fixed_sd)
 
     def load_weights(self, filepath):
         self.model.load_state_dict(torch.load(filepath, map_location=torch.device(self.device)))

@@ -65,18 +65,16 @@ class SRCNN:
         sr = self.model(lr)
         return sr
 
-    def evaluate(self, dataset, batch_size=64):
+    def evaluate(self, dataloader):
         losses, metrics = [], []
-        isEnd = False
-        while not isEnd:
-            lr, hr, isEnd = dataset.get_batch(batch_size, shuffle_each_epoch=False)
+        for lr, hr in dataloader:
             lr, hr = lr.to(self.device), hr.to(self.device)
-            sr = self.predict(lr)
+            with torch.no_grad():
+                sr = self.predict(lr)
             loss = self.loss(hr, sr)
             metric = self.metric(hr, sr)
             losses.append(tensor2numpy(loss))
             metrics.append(tensor2numpy(metric))
-
         return np.mean(losses), np.mean(metrics)
 
     def train(self, train_set, valid_set, batch_size, steps, save_every=1,

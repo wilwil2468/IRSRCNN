@@ -14,7 +14,7 @@ from functools import lru_cache
 
 import torch
 from torch.utils.data import Dataset, DataLoader
-from torchvision.io import read_image
+from torchvision.io import read_image, ImageReadMode
 import torchvision.transforms.functional as TF
 import multiprocessing as mp
 
@@ -23,8 +23,8 @@ mp_ctx = mp.get_context('spawn')
 # ── module-level LRU cache — pickle-safe ───────────────────────────────
 @lru_cache(maxsize=2048)
 def _load_image(path_str):
-    # fast JPEG → torch.Tensor [C,H,W], float in [0,1]
-    return read_image(path_str).float().div(255)
+    # force 3‐channel decode
+    return read_image(path_str, mode=ImageReadMode.RGB).float().div(255)
 
 
 class CachedPatchDataset(Dataset):
@@ -38,19 +38,13 @@ class CachedPatchDataset(Dataset):
 
     def __getitem__(self, idx):
         path = str(self.paths[idx])
-        img  = _load_image(path)           # this is cached per‐process
+        img = _load_image(path)               # [3, H, W]
+        img = img.unsqueeze(0).to(device)     # [1, 3, H, W]
 
-        C, H, W = img.shape
-        top  = random.randint(0, H - self.hr_size)
-        left = random.randint(0, W - self.hr_size)
+        hr = self.crop(img)                   # Kornia RandomCrop on GPU
+        lr = self.resize(hr)                  # Kornia Resize on GPU
 
-        hr = TF.crop(img, top, left, self.hr_size, self.hr_size)
-        lr = TF.resize(
-            hr,
-            [self.lr_size, self.lr_size],
-            interpolation=TF.InterpolationMode.BICUBIC
-        )
-        return lr, hr
+        return lr.squeeze(0), hr.squeeze(0)   # both [3, lr, lr] & [3, hr, hr]
 
 
 class BatchLoaderWrapper:

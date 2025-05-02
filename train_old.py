@@ -18,45 +18,39 @@ from functools import lru_cache
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms.functional as TF
-import lmdb
 
-class LMDBPatchDataset(Dataset):
-    def __init__(self, lmdb_path):
-        # readonly, lock=False speeds up multiworker reads
-        self.env = lmdb.open(
-            lmdb_path,
-            subdir=False,
-            readonly=True,
-            lock=False,
-            readahead=False,
-            meminit=False
-        )
-        with self.env.begin() as txn:
-            # count entries
-            self.length = txn.stat()['entries']
+# ── Module-level cache for fast image loading ─────────────────────────────────
+@lru_cache(maxsize=512)
+def _cached_load(path_str):
+    # Decode JPEG directly to a 3-channel [C,H,W] float tensor in [0,1]
+    return read_image(path_str, mode=ImageReadMode.RGB).float().div(255)
+
+class OnTheFlyPatchDataset(Dataset):
+    def __init__(self, root_dir, lr_size, hr_size):
+        self.paths = sorted(Path(root_dir).rglob("*.jpg"))
+        self.lr_size, self.hr_size = lr_size, hr_size
 
     def __len__(self):
-        return self.length
+        return len(self.paths)
 
     def __getitem__(self, idx):
-        key = f"{idx:08d}".encode()
-        with self.env.begin() as txn:
-            data = txn.get(key)
-        # unpack meta + raw bytes
-        # first 3 int16 for lr shape, next 3 int16 for hr shape
-        meta_bytes = 6 * 2  # 6 int16 values
-        meta = data[:meta_bytes]
-        shapes = np.frombuffer(meta, dtype=np.int16)
-        lr_shape = tuple(shapes[:3])
-        hr_shape = tuple(shapes[3:6])
-        raw = data[meta_bytes:]
-        # split raw into lr and hr
-        lr_n = np.prod(lr_shape)
-        lr_np = np.frombuffer(raw[:lr_n], dtype=np.uint8).reshape(lr_shape)
-        hr_np = np.frombuffer(raw[lr_n:], dtype=np.uint8).reshape(hr_shape)
-        # to torch, [C,H,W], float32
-        lr = torch.from_numpy(lr_np).permute(2,0,1).float().div(255)
-        hr = torch.from_numpy(hr_np).permute(2,0,1).float().div(255)
+        # Fetch from cache or decode if missing
+        path = str(self.paths[idx])
+        img = _cached_load(path)  # [3, H, W]
+
+        C, H, W = img.shape
+        # Random HR crop
+        top = random.randint(0, H - self.hr_size)
+        left = random.randint(0, W - self.hr_size)
+        hr = TF.crop(img, top, left, self.hr_size, self.hr_size)
+
+        # Downscale to LR
+        lr = TF.resize(
+            hr,
+            [self.lr_size, self.lr_size],
+            interpolation=TF.InterpolationMode.BICUBIC
+        )
+
         return lr, hr
 
 
@@ -94,17 +88,11 @@ lr_crop_size  = 33
 hr_crop_size  = 21 if architecture=="915" else 19 if architecture=="935" else 17
 
 # ── 1) Create DataLoaders ────────────────────────────────────────────────────
-train_ds = LMDBPatchDataset("train_patches.lmdb")
-valid_ds = LMDBPatchDataset("valid_patches.lmdb")
+train_ds = OnTheFlyPatchDataset("dataset/train",      lr_crop_size, hr_crop_size)
+valid_ds = OnTheFlyPatchDataset("dataset/validation", lr_crop_size, hr_crop_size)
 
-train_loader = DataLoader(
-    train_ds, batch_size=batch_size, shuffle=True,
-    num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=4
-)
-valid_loader = DataLoader(
-    valid_ds, batch_size=batch_size, shuffle=False,
-    num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=4
-)
+train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=16)
+valid_loader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=16)
 
 # ── 2) Wrap them into get_batch API ──────────────────────────────────────────
 class BatchLoaderWrapper:

@@ -16,37 +16,57 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision.io import read_image
 import torchvision.transforms.functional as TF
-
 import multiprocessing as mp
 
 mp_ctx = mp.get_context('spawn')
 
-device = "cuda"
+# ── module-level LRU cache — pickle-safe ───────────────────────────────
+@lru_cache(maxsize=2048)
+def _load_image(path_str):
+    # fast JPEG → torch.Tensor [C,H,W], float in [0,1]
+    return read_image(path_str).float().div(255)
 
-# ── On‑the‑fly patch dataset ──────────────────────────────────────────────────
+
 class CachedPatchDataset(Dataset):
-    def __init__(self, root_dir, lr_size, hr_size, cache_size=2048):
+    def __init__(self, root_dir, lr_size, hr_size):
         self.paths   = sorted(Path(root_dir).rglob("*.jpg"))
         self.lr_size = lr_size
         self.hr_size = hr_size
-        # decorate the loader to keep the N most-recent images in RAM
-        self._load_image = lru_cache(maxsize=cache_size)(self._load_image_uncached)
 
     def __len__(self):
         return len(self.paths)
 
-    def _load_image_uncached(self, path_str):
-        # fast JPEG → torch.Tensor, [C,H,W], float in [0,1]
-        return read_image(path_str).float().div(255)
-
     def __getitem__(self, idx):
         path = str(self.paths[idx])
-        img = read_image(path).float().div(255).unsqueeze(0).to(device)  # [1,C,H,W]
+        img  = _load_image(path)           # this is cached per‐process
 
-        hr  = self.crop(img)                                             # Kornia RandomCrop on GPU
-        lr  = self.resize(hr)                                            # Kornia Resize on GPU
+        C, H, W = img.shape
+        top  = random.randint(0, H - self.hr_size)
+        left = random.randint(0, W - self.hr_size)
 
-        return lr.squeeze(0), hr.squeeze(0)
+        hr = TF.crop(img, top, left, self.hr_size, self.hr_size)
+        lr = TF.resize(
+            hr,
+            [self.lr_size, self.lr_size],
+            interpolation=TF.InterpolationMode.BICUBIC
+        )
+        return lr, hr
+
+
+class BatchLoaderWrapper:
+    def __init__(self, loader):
+        self.loader   = loader
+        self.iterator = None     # don't spawn workers until first get_batch()
+
+    def get_batch(self, _batch_size):
+        if self.iterator is None:
+            self.iterator = iter(self.loader)
+        try:
+            lr, hr = next(self.iterator)
+        except StopIteration:
+            self.iterator = iter(self.loader)
+            lr, hr = next(self.iterator)
+        return lr, hr, None
 
 # ── Argument parsing ───────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser()
@@ -81,25 +101,31 @@ dataset_dir   = "dataset"
 lr_crop_size  = 33
 hr_crop_size  = 21 if architecture=="915" else 19 if architecture=="935" else 17
 
-# ── 1) Create DataLoaders ────────────────────────────────────────────────────
+# ── DataLoaders ────────────────────────────────────────────────────────────
 train_ds = CachedPatchDataset("dataset/train",      lr_crop_size, hr_crop_size)
 valid_ds = CachedPatchDataset("dataset/validation", lr_crop_size, hr_crop_size)
 
-train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=2, multiprocessing_context=mp_ctx)
-valid_loader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=2)
+train_loader = DataLoader(
+    train_ds,
+    batch_size=batch_size,
+    shuffle=True,
+    num_workers=num_worker,
+    pin_memory=True,
+    persistent_workers=True,
+    prefetch_factor=2,
+    multiprocessing_context=mp_ctx,    # spawn workers safely
+)
 
-# ── 2) Wrap them into get_batch API ──────────────────────────────────────────
-class BatchLoaderWrapper:
-    def __init__(self, loader):
-        self.loader = loader
-        self.iterator = iter(loader)
-    def get_batch(self, _batch_size):
-        try:
-            lr, hr = next(self.iterator)
-        except StopIteration:
-            self.iterator = iter(self.loader)
-            lr, hr = next(self.iterator)
-        return lr, hr, None
+valid_loader = DataLoader(
+    valid_ds,
+    batch_size=batch_size,
+    shuffle=False,
+    num_workers=num_worker,
+    pin_memory=True,
+    persistent_workers=True,
+    prefetch_factor=2,
+    multiprocessing_context=mp_ctx,
+)
 
 train_set = BatchLoaderWrapper(train_loader)
 valid_set = BatchLoaderWrapper(valid_loader)

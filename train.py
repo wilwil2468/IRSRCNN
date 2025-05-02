@@ -10,9 +10,11 @@ from utils.common import PSNR
 from torchvision import transforms
 import kornia.augmentation as K
 from kornia.constants import Resample
+import multiprocessing as mp
 
 # ── GPU Patch Dataset ──────────────────────────────────────────────────
 
+ctx = mp.get_context('spawn')
 class GPUPatchDataset(Dataset):
     def __init__(self, root_dir, lr_size, hr_size, device):
         self.device = device
@@ -94,8 +96,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 train_ds = GPUPatchDataset("dataset/train",      lr_crop_size, hr_crop_size, device)
 valid_ds = GPUPatchDataset("dataset/validation", lr_crop_size, hr_crop_size, device)
 
-train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=num_worker, pin_memory=False, persistent_workers=True, prefetch_factor=2)
-valid_loader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=num_worker, pin_memory=False, persistent_workers=True, prefetch_factor=2)
+train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=num_worker, pin_memory=False, persistent_workers=True, prefetch_factor=2, multiprocessing_context=ctx)
+valid_loader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=num_worker, pin_memory=False, persistent_workers=True, prefetch_factor=2, multiprocessing_context=ctx)
 
 # ── 2) Wrap them into get_batch API ──────────────────────────────────────────
 class BatchLoaderWrapper:

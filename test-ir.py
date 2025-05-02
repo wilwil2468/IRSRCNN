@@ -5,7 +5,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--scale',        type=int, default=2,     help='-')
-parser.add_argument('--architecture', type=str, default="915", help='-')
+parser.add_argument('--architecture', type=str, default="955", help='-')
 parser.add_argument('--ckpt-path',    type=str, default="",    help='-')
 
 # -----------------------------------------------------------
@@ -58,10 +58,18 @@ def main():
             bicubic_image = torch.unsqueeze(bicubic_image, dim=0).to(device)
             sr_image = model.predict(bicubic_image)[0].cpu()
 
-            sum_psnr += PSNR(hr_image, sr_image, max_val=1)
+            # crop both hr and sr to the overlapping valid region
+            # ensure same HxW before PSNR
+            _, H_hr, W_hr = hr_image.shape
+            _, H_sr, W_sr = sr_image.shape
+            H = min(H_hr, H_sr)
+            W = min(W_hr, W_sr)
+            hr_cropped = hr_image[:, :H, :W]
+            sr_cropped = sr_image[:, :H, :W]
+
+            sum_psnr += PSNR(hr_cropped, sr_cropped, max_val=1)
 
     print(sum_psnr.numpy() / len(ls_data))
 
 if __name__ == "__main__":
     main()
-

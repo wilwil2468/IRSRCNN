@@ -20,7 +20,7 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms.functional as TF
 
 # ── Module-level cache for fast image loading ─────────────────────────────────
-@lru_cache(maxsize=2048)
+@lru_cache(maxsize=512)
 def _cached_load(path_str):
     # Decode JPEG directly to a 3-channel [C,H,W] float tensor in [0,1]
     return read_image(path_str, mode=ImageReadMode.RGB).float().div(255)

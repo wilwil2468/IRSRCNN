@@ -37,8 +37,14 @@ if __name__ == "__main__":
     paths = sorted(Path(args.src_dir).rglob("*.jpg"))
     total_patches = len(paths) * args.per_image
 
-    # create LMDB: map_size must exceed total bytes; we choose 10× rough estimate
-    map_size = total_patches * args.hr * args.hr * 3 * 2  # two arrays per patch
+    # compute bytes per patch exactly (HR + LR + meta)
+    hr_bytes = args.hr * args.hr * 3
+    lr_bytes = args.lr * args.lr * 3
+    meta_bytes = 6 * 2                # six int16 values
+    patch_bytes = hr_bytes + lr_bytes + meta_bytes
+    # total with 10% slack
+    map_size = int(patch_bytes * total_patches * 1.10)
+    print(f"Setting LMDB map_size = {map_size / (1024**3):.2f} GB")
     env = lmdb.open(args.lmdb_path, map_size=map_size)
 
     with env.begin(write=True) as txn:

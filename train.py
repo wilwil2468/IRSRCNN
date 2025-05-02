@@ -25,7 +25,8 @@ mp_ctx = mp.get_context('spawn')
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # ── module-level LRU cache — pickle-safe ───────────────────────────────
-@lru_cache(maxsize=2048)
+cache_size = 512
+@lru_cache(maxsize=cache_size)
 def _load_image(path_str):
     # force 3‐channel decode
     return read_image(path_str, mode=ImageReadMode.RGB).float().div(255)
@@ -33,7 +34,7 @@ def _load_image(path_str):
 
 class CachedPatchDataset(Dataset):
     def __init__(self, root_dir, lr_size, hr_size,
-                 cache_size=2048, device="cuda"):
+                 cache_size=cache_size, device="cuda"):
         self.paths   = sorted(Path(root_dir).rglob("*.jpg"))
         self.lr_size = lr_size
         self.hr_size = hr_size
@@ -112,7 +113,7 @@ lr_crop_size  = 33
 hr_crop_size  = 21 if architecture=="915" else 19 if architecture=="935" else 17
 
 # ── DataLoaders ────────────────────────────────────────────────────────────
-train_ds = CachedPatchDataset("dataset/train",      lr_crop_size, hr_crop_size, cache_size=2048, device="cuda")
+train_ds = CachedPatchDataset("dataset/train",      lr_crop_size, hr_crop_size, cache_size=cache_size, device="cuda")
 valid_ds = CachedPatchDataset("dataset/validation", lr_crop_size, hr_crop_size)
 
 train_loader = DataLoader(

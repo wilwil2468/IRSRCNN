@@ -123,8 +123,8 @@ def main():
     )
     srcnn.load_checkpoint(ckpt_path)
     srcnn.train(
-        train_loader,     # now has get_batch()
-        valid_loader,     # now has get_batch()
+        train_set,     # now has get_batch()
+        valid_set,     # now has get_batch()
         steps=steps,
         batch_size=batch_size,
         save_best_only=save_best_only,

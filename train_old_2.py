@@ -1,11 +1,24 @@
-from utils.dataset import dataset
- from utils.common import PSNR
- from model import SRCNN
-from utils.lmdb_dataset import LMDBDataset
- import argparse
-import torch.utils.data as data
- import torch
- import os
+from pathlib import Path
+from torch.utils.data import Dataset, DataLoader
+from PIL import Image
+import random
+import torch
+import argparse
+import os
+import numpy as np
+from model import SRCNN
+from utils.common import PSNR
+from torchvision import transforms
+from torchvision.io import read_image, ImageReadMode
+
+import random
+from pathlib import Path
+from functools import lru_cache
+
+import torch
+from torch.utils.data import Dataset, DataLoader
+import torchvision.transforms.functional as TF
+import lmdb
 
 class LMDBPatchDataset(Dataset):
     def __init__(self, lmdb_path):
@@ -76,39 +89,22 @@ os.makedirs(ckpt_dir, exist_ok=True)
 model_path = os.path.join(ckpt_dir, f"SRCNN-{architecture}.pt")
 ckpt_path  = os.path.join(ckpt_dir, "ckpt.pt")
 
-# -----------------------------------------------------------
-#  Init datasets (either from LMDB or on-the-fly)
-# -----------------------------------------------------------
+dataset_dir   = "dataset"
+lr_crop_size  = 33
+hr_crop_size  = 21 if architecture=="915" else 19 if architecture=="935" else 17
 
-# paths where we expect precomputed patches
-train_lmdb = f"dataset/train/train_patches_{architecture}.lmdb"
-valid_lmdb = f"dataset/validation/valid_patches_{architecture}.lmdb"
+# ── 1) Create DataLoaders ────────────────────────────────────────────────────
+train_ds = LMDBPatchDataset(f"train_patches_{architecture}.lmdb")
+valid_ds = LMDBPatchDataset(f"valid_patches_{architecture}.lmdb")
 
-# if both LMDB paths are provided, use the precomputed patches
-if os.path.exists(train_lmdb) and os.path.exists(valid_lmdb):
-    print(f"→ Loading train patches from LMDB: {train_lmdb}")
-    train_set = LMDBDataset(train_lmdb)
-    print(f"→ Loading valid patches from LMDB: {valid_lmdb}")
-    valid_set = LMDBDataset(valid_lmdb)
-
-else:
-    # fallback to on-the-fly patch generation
-    print("PRECOMPUTED PATCHES NOT FOUND!\nFalling back to on‑the‑fly generation.")
-    dataset_dir = "dataset"
-    lr_crop_size = 33
-    hr_crop_size = 21
-    if architecture == "935":
-        hr_crop_size = 19
-    elif architecture == "955":
-        hr_crop_size = 17
-
-    train_set = dataset(dataset_dir, "train")
-    train_set.generate(lr_crop_size, hr_crop_size)
-    train_set.load_data()
-
-    valid_set = dataset(dataset_dir, "validation")
-    valid_set.generate(lr_crop_size, hr_crop_size)
-    valid_set.load_data()
+train_loader = DataLoader(
+    train_ds, batch_size=batch_size, shuffle=True,
+    num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=4
+)
+valid_loader = DataLoader(
+    valid_ds, batch_size=batch_size, shuffle=False,
+    num_workers=num_worker, pin_memory=True, persistent_workers=True, prefetch_factor=4
+)
 
 # ── 3) Model setup & training ─────────────────────────────────────────────────
 def main():

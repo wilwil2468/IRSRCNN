@@ -93,6 +93,7 @@ class SRCNN:
 
         loss_buffer = []
         metric_buffer = []
+        print()
         while cur_step < max_steps:
             cur_step += 1
             lr, hr, _ = train_set.get_batch(batch_size)

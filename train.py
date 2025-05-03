@@ -7,6 +7,10 @@ import torch.utils.data as data
 import torch
 import os
 
+import sys
+# make stdout line‑buffered even when not a tty
+sys.stdout.reconfigure(line_buffering=True)
+
 class LMDBPatchDataset(dataset):
     def __init__(self, lmdb_path):
         # readonly, lock=False speeds up multiworker reads

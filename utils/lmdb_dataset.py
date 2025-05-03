@@ -46,8 +46,9 @@ class LMDBDataset(Dataset):
         hr_np = np.frombuffer(val[offset:offset + hr_n], dtype=np.uint8).reshape(hr_shape)
 
         # to CHW float tensors in [0,1]
-        lr = torch.from_numpy(lr_np).permute(2, 0, 1).float().div(255.0)
-        hr = torch.from_numpy(hr_np).permute(2, 0, 1).float().div(255.0)
+        # ensure the underlying array is writable
+        lr = torch.from_numpy(lr_np.copy()).permute(2, 0, 1).float().div(255.0)
+        hr = torch.from_numpy(hr_np.copy()).permute(2, 0, 1).float().div(255.0)
 
         return lr, hr
 

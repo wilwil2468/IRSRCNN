@@ -77,7 +77,7 @@ if __name__ == "__main__":
         metasync=False,
     )
 
-    chunk_size = 10_000
+    chunk_size = 30_000
     idx = 0
     txn = env.begin(write=True)
 

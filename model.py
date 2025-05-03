@@ -39,8 +39,9 @@ class SRCNN:
         self.model.load_state_dict(torch.load(filepath, map_location=torch.device(self.device)))
 
     def predict(self, lr):
-        self.model.train(False)
-        sr = self.model(lr)
+        self.model.eval()
+        with torch.no_grad():
+            sr = self.model(lr)
         return sr
 
     def evaluate(self, dataset, batch_size=64):
@@ -98,11 +99,15 @@ class SRCNN:
                 loss = np.mean(loss_buffer)
                 metric = np.mean(metric_buffer)
                 val_loss, val_metric = self.evaluate(valid_set)
-                print(f"Step {cur_step}/{max_steps}",
-                      f"- loss: {loss:.7f}",
-                      f"- {self.metric.__name__}: {metric:.3f}",
-                      f"- val_loss: {val_loss:.7f}",
-                      f"- val_{self.metric.__name__}: {val_metric:.3f}")
+                msg = (
+                    f"Step {cur_step}/{max_steps} - "
+                    f"loss: {loss:.7f} - "
+                    f"{self.metric.__name__}: {metric:.3f} - "
+                    f"val_loss: {val_loss:.7f} - "
+                    f"val_{self.metric.__name__}: {val_metric:.3f}"
+                )
+                # overwrite the same console line
+                print('\r' + msg, end='', flush=True)
                 if save_log == True:
                     dict_logger["loss"].values.append(loss)
                     dict_logger["metric"].values.append(metric)
@@ -119,8 +124,9 @@ class SRCNN:
                 if save_best_only and val_loss > prev_loss:
                     continue
                 prev_loss = val_loss
+                print()
                 torch.save(self.model.state_dict(), self.model_path)
-                print(f"Save model to {self.model_path}\n")
+                print(f"Save model to {self.model_path}")
         
         if save_log == True:
             for key in dict_logger.keys():

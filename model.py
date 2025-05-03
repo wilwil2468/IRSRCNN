@@ -31,12 +31,17 @@ class SRCNN:
     def load_checkpoint(self, ckpt_path):
         if not exists(ckpt_path):
             return
-        self.ckpt_man = torch.load(ckpt_path)
+        self.ckpt_man = torch.load(ckpt_path, weights_only=True)
         self.optimizer.load_state_dict(self.ckpt_man['optimizer'])
         self.model.load_state_dict(self.ckpt_man['model'])
 
     def load_weights(self, filepath):
-        self.model.load_state_dict(torch.load(filepath, map_location=torch.device(self.device)))
+        self.model.load_state_dict(
+            torch.load(filepath,
+                       map_location=torch.device(self.device),
+                       weights_only=True
+            )
+        )
 
     def predict(self, lr):
         self.model.eval()

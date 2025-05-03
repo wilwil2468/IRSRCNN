@@ -122,6 +122,7 @@ def main():
         metric=PSNR
     )
     srcnn.load_checkpoint(ckpt_path)
+    print("Training start..")
     srcnn.train(
         train_set,     # now has get_batch()
         valid_set,     # now has get_batch()

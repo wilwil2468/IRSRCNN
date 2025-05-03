@@ -101,14 +101,14 @@ class SRCNN:
             loss_buffer.append(tensor2numpy(loss))
             metric_buffer.append(tensor2numpy(metric))
 
-            # ─── new: per‑iteration progress overwrite ───────────────────────────────
+            # ─── new: per‑iteration visible print ───────────────────────────────────
             print(
-                f"\rStep {cur_step}/{max_steps} - "
+                f"Step {cur_step}/{max_steps} - "
                 f"loss: {tensor2numpy(loss):.7f} - "
                 f"{self.metric.__name__}: {tensor2numpy(metric):.3f}",
-                end='', flush=True
+                flush=True
             )
-            # ─────────────────────────────────────────────────────────────────────────
+             # ─────────────────────────────────────────────────────────────────────────
 
             if (cur_step % save_every == 0) or (cur_step >= max_steps):
                 loss = np.mean(loss_buffer)

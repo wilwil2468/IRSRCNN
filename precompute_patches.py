@@ -65,7 +65,7 @@ if __name__ == "__main__":
         paths += sorted(Path(args.src_dir).rglob(ext))
 
     # open LMDB
-    TEN_GIB = 30 * 1024**3
+    TEN_GIB = 20 * 1024**3
     env = lmdb.open(
         args.lmdb_path,
         map_size=TEN_GIB,
@@ -77,7 +77,7 @@ if __name__ == "__main__":
         metasync=False,
     )
 
-    chunk_size = 30_000
+    chunk_size = 20_000
     idx = 0
     txn = env.begin(write=True)
 

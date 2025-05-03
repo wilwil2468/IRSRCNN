@@ -81,8 +81,8 @@ ckpt_path  = os.path.join(ckpt_dir, "ckpt.pt")
 # -----------------------------------------------------------
 
 # paths where we expect precomputed patches
-train_lmdb = f"dataset/train/train_patches_{architecture}.lmdb"
-valid_lmdb = f"dataset/validation/valid_patches_{architecture}.lmdb"
+train_lmdb = f"train_patches_{architecture}.lmdb"
+valid_lmdb = f"valid_patches_{architecture}.lmdb"
 
 # if both LMDB paths are provided, use the precomputed patches
 if os.path.exists(train_lmdb) and os.path.exists(valid_lmdb):

@@ -7,7 +7,7 @@ import torch.utils.data as data
 import torch
 import os
 
-class LMDBPatchDataset(Dataset):
+class LMDBPatchDataset(dataset):
     def __init__(self, lmdb_path):
         # readonly, lock=False speeds up multiworker reads
         self.env = lmdb.open(

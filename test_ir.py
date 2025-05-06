@@ -38,8 +38,8 @@ def main():
     model = SRCNN(architecture, device)
     model.load_weights(ckpt_path)
 
-    ls_data = sorted_list(f"dataset/test/x{scale}/data")
-    ls_labels = sorted_list(f"dataset/test/x{scale}/labels")
+    ls_data = sorted_list(f"dataset/test_ir/x{scale}/data")
+    ls_labels = sorted_list(f"dataset/test_ir/x{scale}/labels")
 
     sum_psnr = 0
     with torch.no_grad():

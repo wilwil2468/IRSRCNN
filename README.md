@@ -80,12 +80,6 @@ Out of the three models (SRCNN-915, SRCNN-935, SRCNN-955) provided in the origin
 
 </div>
 
-<div align="center">
-  <img src="./README/example.png" width="1000">  
-  <p><strong>Bicubic x2 (left), SRCNN-955 x2 (right).</strong></p>
-</div>
-Source: game ZingSpeed Mobile
-
 ## References
 - Image Super-Resolution Using Deep Convolutional Networks: https://arxiv.org/abs/1501.00092
 - SRCNN Matlab code: http://mmlab.ie.cuhk.edu.hk/projects/SRCNN.html

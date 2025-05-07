@@ -71,12 +71,15 @@ Out of the three models (SRCNN-915, SRCNN-935, SRCNN-955) provided in the origin
 |        Model        | Set5 x2 | Set5 x3 | Set5 x4 |  ADAS x2  |  ADAS x3  |  ADAS x4  |
 |:-------------------:|:-------:|:-------:|:-------:|:---------:|:---------:|:---------:|
 | Original SRCNN-955	| 36.7996 | 34.2977 | 32.1393 |	38.13365  | 37.2313   | 36.24281  |
-| Train1* SRCNN-955	  | 36.7996 | 34.2977 | 32.1393 |	38.13365  | 37.2313   | 36.24281  |
-| Train2* SRCNN-955	  | 36.7996 | 34.2977 | 32.1393 |	38.13365  | 37.2313   | 36.24281  |
+| Train1* SRCNN-955	  |23.097055|23.209316|22.964123| 37.894855 | 37.204224 | 35.9873   |
+| Train2* SRCNN-955	  |29.006723|29.565699|28.57095 | 37.891994 | 37.241474 | 35.999523 |
+| Train3* SRCNN-955	  |29.427145|30.004822|28.939016|	37.92979  | 37.24983  | 36.014103 |
 
 *Train1 = Trained from start exclusively on FLIR ADAS dataset, 300.000 steps
 
 *Train2 = Finetuned from original training checkpoint (300.000 steps original + 131.000 steps finetuning) on FLIR ADAS dataset.
+
+*Train3 = Finetuned from original training checkpoint (300.000 steps original + 70.000 steps finetuning) on FLIR ADAS dataset.
 
 </div>
 

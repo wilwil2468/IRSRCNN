@@ -2,8 +2,7 @@
 # [Pytorch] Super-Resolution CNN
 
 Implementation of SRCNN model in **Image Super-Resolution using Deep Convolutional Network** paper with Pytorch.
-
-Tensorflow version: https://github.com/Nhat-Thanh/SRCNN-TF
+Trained with FLIR ADAS dataset to focus on upscaling thermal images.
 
 Adam with optimize tuned hyperparameters is used instead of SGD + Momentum. 
 

@@ -10,6 +10,13 @@ I used Adam with optimize tuned hyperparameters instead of SGD + Momentum.
 I implemented 3 models in the paper, SRCNN-915, SRCNN-935, SRCNN-955.
 
 
+# Branches:
+
+full-adas: Full FLIR ADAS dataset is used and experimental algorithm is also used (using LMDB to precompute the dataset and accelerate the training process, and trains based on precomputed patches, enables the full use of the dataset on lower end computers but currently shows worse result)
+
+default: Scaled down (randomly selected, all picture has different properties) FLIR ADAS dataset, and uses the original training approach.
+
+
 ## Contents
 - [Train](#train)
 - [Test](#test)

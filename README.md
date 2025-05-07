@@ -99,6 +99,5 @@ Models are evaluated against Set5 and FLIR ADAS dataset by PSNR:
 - SRCNN Matlab code: http://mmlab.ie.cuhk.edu.hk/projects/SRCNN.html
 - T91: http://vllab.ucmerced.edu/wlai24/LapSRN/results/SR_training_datasets.zip
 - Set5: https://filebox.ece.vt.edu/~jbhuang/project/selfexsr/Set5_SR.zip
-- Set14: https://filebox.ece.vt.edu/~jbhuang/project/selfexsr/Set14_SR.zip
-- BSD100: https://filebox.ece.vt.edu/~jbhuang/project/selfexsr/BSD100_SR.zip
-- Urban100: https://filebox.ece.vt.edu/~jbhuang/project/selfexsr/Urban100_SR.zip
+- FLIR ADAS: https://www.flir.com/oem/adas/adas-dataset-form/
+- Forked from: https://github.com/Nhat-Thanh/SRCNN-Pytorch

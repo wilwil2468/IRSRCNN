@@ -5,9 +5,9 @@ Implementation of SRCNN model in **Image Super-Resolution using Deep Convolution
 
 Tensorflow version: https://github.com/Nhat-Thanh/SRCNN-TF
 
-I used Adam with optimize tuned hyperparameters instead of SGD + Momentum. 
+Adam with optimize tuned hyperparameters is used instead of SGD + Momentum. 
 
-I implemented 3 models in the paper, SRCNN-915, SRCNN-935, SRCNN-955.
+3 models in the paper were implemented, SRCNN-915, SRCNN-935, SRCNN-955. But out of consideration for accuracy, only SRCNN-955 will be used. 
 
 
 # Branches:

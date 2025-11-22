@@ -1,6 +1,6 @@
 """
 Demo script for quantized SRCNN model - single image super-resolution
-Adapted for Brevitas quantized models
+FIXED: Uses RGB color space (matching training) instead of YCbCr
 """
 import torch
 from quantized_model import SRCNN_Quantized
@@ -9,8 +9,7 @@ import argparse
 # Import common utilities if available
 try:
     from utils.common import (
-        read_image, write_image, rgb2ycbcr, ycbcr2rgb,
-        gaussian_blur, upscale, norm01, denorm01
+        read_image, write_image, gaussian_blur, upscale, norm01, denorm01
     )
     USE_COMMON = True
 except ImportError:
@@ -28,35 +27,6 @@ if not USE_COMMON:
     
     def write_image(filepath, src):
         io.write_png(src, filepath)
-    
-    def rgb2ycbcr(src):
-        R = src[0]
-        G = src[1]
-        B = src[2]
-        
-        ycbcr = torch.zeros(size=src.shape)
-        ycbcr[0] = 0.299 * R + 0.587 * G + 0.114 * B
-        ycbcr[1] = -0.16874 * R - 0.33126 * G + 0.5 * B + 128
-        ycbcr[2] = 0.5 * R - 0.41869 * G - 0.08131 * B + 128
-        
-        ycbcr[0] = torch.clip(ycbcr[0], 16, 235)
-        ycbcr[[1, 2]] = torch.clip(ycbcr[[1, 2]], 16, 240)
-        ycbcr = ycbcr.type(torch.uint8)
-        return ycbcr
-    
-    def ycbcr2rgb(src):
-        Y = src[0]
-        Cb = src[1]
-        Cr = src[2]
-        
-        rgb = torch.zeros(size=src.shape)
-        rgb[0] = Y + 1.402 * Cr - 179.456
-        rgb[1] = Y - 0.34414 * Cb - 0.71414 * Cr + 135.45984
-        rgb[2] = Y + 1.772 * Cb - 226.816
-        
-        rgb = torch.clip(rgb, 0, 255)
-        rgb = rgb.type(torch.uint8)
-        return rgb
     
     def gaussian_blur(src, ksize=3, sigma=0.5):
         blur_image = transforms.GaussianBlur(kernel_size=ksize, sigma=sigma)(src)
@@ -109,7 +79,7 @@ ckpt_path = FLAGS.ckpt_path
 if (ckpt_path == "") or (ckpt_path == "default"):
     ckpt_path = f"weights/SRCNN-{architecture}-w{bit_width}-flir-best.pt"
 
-# Preprocessing parameters (same as test_ir.py)
+# Preprocessing parameters
 sigma = 0.3 if scale == 2 else 0.2
 pad = int(architecture[1]) // 2 + 6
 
@@ -138,6 +108,7 @@ def main():
     print(f"Loading model: {ckpt_path}")
     print(f"Architecture: {architecture}, Bit-width: {bit_width}, Scale: {scale}")
     print(f"Input image: {image_path}")
+    print(f"Color space: RGB (matching training)")
     print("=" * 70)
     
     # Load and preprocess image for bicubic baseline
@@ -153,7 +124,8 @@ def main():
     lr_image = read_image(image_path)
     lr_image = gaussian_blur(lr_image, sigma=sigma)
     bicubic_image = upscale(lr_image, scale)
-    bicubic_image = rgb2ycbcr(bicubic_image)
+    
+    # STAY IN RGB - no color space conversion
     bicubic_image = norm01(bicubic_image)
     bicubic_image = torch.unsqueeze(bicubic_image, dim=0)
     
@@ -168,10 +140,9 @@ def main():
         bicubic_image = bicubic_image.to(device)
         sr_image = model(bicubic_image)[0].cpu()
     
-    # Postprocess and save
+    # Postprocess and save - STAY IN RGB
     sr_image = denorm01(sr_image)
     sr_image = sr_image.type(torch.uint8)
-    sr_image = ycbcr2rgb(sr_image)
     
     write_image(output_sr, sr_image)
     print(f"✓ SRCNN result saved to: {output_sr}")

@@ -1,6 +1,6 @@
 """
 Test quantized SRCNN model on FLIR thermal images
-Similar approach to test_ir.py but uses quantized model
+FIXED: Uses RGB color space (matching training) instead of YCbCr
 """
 import torch
 import torch.nn.functional as F
@@ -12,7 +12,7 @@ import argparse
 # Import common utilities if available
 try:
     from utils.common import (
-        read_image, rgb2ycbcr, gaussian_blur, upscale, 
+        read_image, gaussian_blur, upscale, 
         norm01, PSNR, sorted_list
     )
     USE_COMMON = True
@@ -25,22 +25,6 @@ except ImportError:
 def read_image(filepath):
     image = io.read_image(filepath, io.ImageReadMode.RGB)
     return image
-
-
-def rgb2ycbcr(src):
-    R = src[0]
-    G = src[1]
-    B = src[2]
-    
-    ycbcr = torch.zeros(size=src.shape)
-    ycbcr[0] = 0.299 * R + 0.587 * G + 0.114 * B
-    ycbcr[1] = -0.16874 * R - 0.33126 * G + 0.5 * B + 128
-    ycbcr[2] = 0.5 * R - 0.41869 * G - 0.08131 * B + 128
-    
-    ycbcr[0] = torch.clip(ycbcr[0], 16, 235)
-    ycbcr[[1, 2]] = torch.clip(ycbcr[[1, 2]], 16, 240)
-    ycbcr = ycbcr.type(torch.uint8)
-    return ycbcr
 
 
 def gaussian_blur(src, ksize=3, sigma=0.5):
@@ -101,12 +85,12 @@ bit_width = FLAGS.bit_width
 
 ckpt_path = FLAGS.ckpt_path
 if (ckpt_path == "") or (ckpt_path == "default"):
-    ckpt_path = f"checkpoint/quantized/SRCNN-955.pt"
+    ckpt_path = f"weights/SRCNN-{architecture}-w{bit_width}-flir-best.pt"
 
 data_dir = FLAGS.data_dir
 labels_dir = FLAGS.labels_dir
 
-# Sigma and padding based on scale (same as test_ir.py)
+# Sigma and padding based on scale
 sigma = 0.3 if scale == 2 else 0.2
 pad = int(architecture[1]) // 2 + 6
 
@@ -139,6 +123,7 @@ def main():
     print(f"Using device: {device}")
     print(f"Loading model: {ckpt_path}")
     print(f"Architecture: {architecture}, Bit-width: {bit_width}, Scale: {scale}")
+    print(f"Color space: RGB (matching training)")
     
     model = SRCNN_Quantized(architecture=architecture, bit_width=bit_width)
     model.load_state_dict(torch.load(ckpt_path, map_location=device))
@@ -164,7 +149,7 @@ def main():
     sum_psnr = 0
     with torch.no_grad():
         for i in range(num_images):
-            # Read LR image and apply preprocessing (same as test_ir.py)
+            # Read LR image and apply preprocessing
             lr_image = read_image(ls_data[i])
             lr_image = gaussian_blur(lr_image, sigma=sigma)
             bicubic_image = upscale(lr_image, scale)
@@ -172,11 +157,10 @@ def main():
             # Read HR image
             hr_image = read_image(ls_labels[i])
             
-            # Convert to YCbCr
-            bicubic_image = rgb2ycbcr(bicubic_image)
-            hr_image = rgb2ycbcr(hr_image[:, pad:-pad, pad:-pad])
+            # Crop HR image (account for padding)
+            hr_image = hr_image[:, pad:-pad, pad:-pad]
             
-            # Normalize to [0, 1]
+            # Normalize to [0, 1] - STAY IN RGB (no YCbCr conversion)
             bicubic_image = norm01(bicubic_image)
             hr_image = norm01(hr_image)
             

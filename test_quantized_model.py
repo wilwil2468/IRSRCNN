@@ -101,7 +101,7 @@ bit_width = FLAGS.bit_width
 
 ckpt_path = FLAGS.ckpt_path
 if (ckpt_path == "") or (ckpt_path == "default"):
-    ckpt_path = f"NEW/SRCNN-955.pt"
+    ckpt_path = f"checkpoint/quantized/SRCNN-955.pt"
 
 data_dir = FLAGS.data_dir
 labels_dir = FLAGS.labels_dir
